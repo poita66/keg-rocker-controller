@@ -106,7 +106,7 @@ void draw()
   lcd.print(textToShow);
 
   lcd.setCursor(0, 1);
-  int timeToShowSecs = running ? ((endTimeMs - millis()) / 1000) : (chosenTimeMins * 60);
+  int timeToShowSecs = running ? ((endTimeMs - millis()) / 1000) + 1 : (chosenTimeMins * 60);
   char time[10];
   getLabel(time, sizeof(time), max(timeToShowSecs, 0));
   lcd.print(time);
