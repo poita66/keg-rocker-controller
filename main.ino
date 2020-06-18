@@ -39,6 +39,7 @@
 // include the library code:
 #include <Arduino.h>
 #include <LiquidCrystal.h>
+#include <string.h>
 
 enum Buttons
 {
@@ -53,26 +54,42 @@ enum Buttons
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
+#define LINE_LEN 16
+#define ROWS 2
+#define RUNNING_TEXT "Running..."
+#define NOT_RUNNING_TEXT "Set time (mm:ss)"
+#define BUTTON_HOLD_TIME 250
+
+int text_len = max(strlen(RUNNING_TEXT), strlen(NOT_RUNNING_TEXT)) + 1;
+
 void setup()
 {
   // set up the LCD's number of columns and rows:
-  lcd.begin(16, 2);
+  lcd.begin(LINE_LEN, ROWS);
 }
 
 int chosen_time_mins = 5;
 unsigned long end_time_ms = 0;
 bool running = false;
 Buttons button_pressed_last_loop = Buttons::NONE;
+unsigned long button_pressed_last_loop_time_ms = 0;
 
 void loop()
 {
   Buttons button_pressed = get_button_pressed();
 
+  bool button_held = false;
   if (button_pressed && button_pressed_last_loop == button_pressed)
   {
-    // TODO: Allow press & holding of UP & DOWN buttons
-    draw();
-    return;
+    if (((long)millis() - (long)button_pressed_last_loop_time_ms) > BUTTON_HOLD_TIME)
+    {
+      button_held = true;
+    }
+    else
+    {
+      draw();
+      return;
+    }
   }
 
   switch (button_pressed)
@@ -80,11 +97,10 @@ void loop()
   case Buttons::UP:
     if (!running)
     {
-      // Up
       ++chosen_time_mins;
-      if (chosen_time_mins > 59)
+      if (chosen_time_mins > 99)
       {
-        chosen_time_mins = 59;
+        chosen_time_mins = 99;
       }
     }
 
@@ -93,7 +109,6 @@ void loop()
   case Buttons::DOWN:
     if (!running)
     {
-      // Down
       --chosen_time_mins;
       if (chosen_time_mins < 1)
       {
@@ -103,22 +118,26 @@ void loop()
     break;
 
   case Buttons::SELECT:
-    if (running)
+    if (!button_held)
     {
-      running = false;
-    }
-    else
-    {
-      end_time_ms = millis() + ((unsigned long)chosen_time_mins * 60 * 1000);
-      running = true;
+      if (running)
+      {
+        running = false;
+      }
+      else
+      {
+        end_time_ms = millis() + ((unsigned long)chosen_time_mins * 60 * 1000);
+        running = true;
+      }
     }
     break;
 
   default:
+    // No button was pressed, do nothing
     break;
   }
 
-  if (end_time_ms && (end_time_ms - millis()) <= 0)
+  if (end_time_ms && ((long)end_time_ms - (long)millis()) <= 0)
   {
     running = false;
     end_time_ms = 0;
@@ -127,54 +146,54 @@ void loop()
   draw();
 
   button_pressed_last_loop = button_pressed;
+  button_pressed_last_loop_time_ms = millis();
 }
 
 void draw()
 {
   lcd.setCursor(0, 0);
-  lcd.print(running ? "Running...      " : "Set time (mm:ss)");
+  char text_to_show[text_len];
+  snprintf(text_to_show, text_len, "%-16s", running ? RUNNING_TEXT : NOT_RUNNING_TEXT);
+  lcd.print(text_to_show);
 
   lcd.setCursor(0, 1);
   int time_to_show_secs = running ? ((end_time_ms - millis()) / 1000) : (chosen_time_mins * 60);
   char time[10];
-  get_label(time, time_to_show_secs);
+  get_label(time, sizeof(time), max(time_to_show_secs, 0));
   lcd.print(time);
-  //free(time);
 }
 
-char *get_label(char retval[10], int val_secs)
+char *get_label(char *buf, size_t buf_size, int val_secs)
 {
-  //char retval[10]; // (char *)malloc(10);
   int mins = val_secs / 60;
   int secs = val_secs - mins * 60;
-  snprintf(retval, 10, "%02d:%02d", mins, secs);
-  //return retval;
+  snprintf(buf, buf_size, "%02d:%02d", mins, secs);
 }
 
 Buttons get_button_pressed()
 {
   int val = analogRead(A0);
-  Buttons button_pressed = Buttons::NONE;
+
   if (val >= 0 && val <= 50)
   {
-    button_pressed = Buttons::RIGHT;
+    return Buttons::RIGHT;
   }
   else if (val >= 50 && val <= 150)
   {
-    button_pressed = Buttons::UP;
+    return Buttons::UP;
   }
   else if (val >= 150 && val <= 300)
   {
-    button_pressed = Buttons::DOWN;
+    return Buttons::DOWN;
   }
   else if (val >= 300 && val <= 500)
   {
-    button_pressed = Buttons::LEFT;
+    return Buttons::LEFT;
   }
   else if (val >= 500 && val <= 750)
   {
-    button_pressed = Buttons::SELECT;
+    return Buttons::SELECT;
   }
 
-  return button_pressed;
+  return Buttons::NONE;
 }
