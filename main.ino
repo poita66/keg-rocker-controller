@@ -8,6 +8,8 @@
 #define RUNNING_TEXT "Running..."
 #define NOT_RUNNING_TEXT "Set time (mm:ss)"
 #define BUTTON_HOLD_TIME 250
+#define MOTOR_CONTROL_PIN PIN2
+#define STEP_SECS 15
 
 enum Button
 {
@@ -22,27 +24,31 @@ enum Button
 const int textLen = max(strlen(RUNNING_TEXT), strlen(NOT_RUNNING_TEXT)) + 1;
 
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
-int chosenTimeMins = 5;
+int chosenTimeSecs = 3 * 60;
 unsigned long endTimeMs = 0;
-bool running = false;
+bool isRunning = false;
+uint8_t motorState = LOW;
 Button buttonPressedLastLoop = Button::NONE;
 unsigned long buttonPressedLastLoopTimeMs = 0;
 
 void setup()
 {
   lcd.begin(LINE_LEN, ROWS);
+  pinMode(MOTOR_CONTROL_PIN, OUTPUT);
+
+  digitalWrite(MOTOR_CONTROL_PIN, LOW);
 }
 
 void loop()
 {
   Button buttonPressed = getButtonPressed();
 
-  bool buttonHeld = false;
+  bool isButtonHeld = false;
   if (buttonPressed && buttonPressedLastLoop == buttonPressed)
   {
     if (((long)millis() - (long)buttonPressedLastLoopTimeMs) > BUTTON_HOLD_TIME)
     {
-      buttonHeld = true;
+      isButtonHeld = true;
     }
     else
     {
@@ -54,29 +60,29 @@ void loop()
   switch (buttonPressed)
   {
   case Button::UP:
-    if (!running && chosenTimeMins < 99)
+    if (!isRunning && chosenTimeSecs < 99 * 60)
     {
-      ++chosenTimeMins;
+      chosenTimeSecs += STEP_SECS;
     }
 
     break;
 
   case Button::DOWN:
-    if (!running && chosenTimeMins > 1)
+    if (!isRunning && chosenTimeSecs > STEP_SECS)
     {
-      --chosenTimeMins;
+      chosenTimeSecs -= STEP_SECS;
     }
     break;
 
   case Button::SELECT:
-    if (!buttonHeld)
+    if (!isButtonHeld)
     {
-      if (!running)
+      if (!isRunning)
       {
-        endTimeMs = millis() + ((unsigned long)chosenTimeMins * 60 * 1000);
+        endTimeMs = millis() + ((unsigned long)chosenTimeSecs * 1000);
       }
 
-      running = !running;
+      isRunning = !isRunning;
     }
     break;
 
@@ -88,7 +94,7 @@ void loop()
   bool endTimeReached = endTimeMs && ((long)endTimeMs - (long)millis()) <= 0;
   if (endTimeReached)
   {
-    running = false;
+    isRunning = false;
     endTimeMs = 0;
   }
 
@@ -96,17 +102,23 @@ void loop()
 
   buttonPressedLastLoop = buttonPressed;
   buttonPressedLastLoopTimeMs = millis();
+
+  if (motorState != isRunning)
+  {
+    motorState = isRunning;
+    digitalWrite(MOTOR_CONTROL_PIN, motorState);
+  }
 }
 
 void draw()
 {
   lcd.setCursor(0, 0);
   char textToShow[textLen];
-  snprintf(textToShow, textLen, "%-16s", running ? RUNNING_TEXT : NOT_RUNNING_TEXT);
+  snprintf(textToShow, textLen, "%-16s", isRunning ? RUNNING_TEXT : NOT_RUNNING_TEXT);
   lcd.print(textToShow);
 
   lcd.setCursor(0, 1);
-  int timeToShowSecs = running ? ((endTimeMs - millis()) / 1000) + 1 : (chosenTimeMins * 60);
+  int timeToShowSecs = isRunning ? ((endTimeMs - millis()) / 1000) + 1 : chosenTimeSecs;
   char time[10];
   getLabel(time, sizeof(time), max(timeToShowSecs, 0));
   lcd.print(time);
